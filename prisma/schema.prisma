@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Collected on the Membership Application step
+  dob                   DateTime?
+  address               String?
+  city                  String?
+  zip                   String?
+  cellPhone             String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
+  membership Membership?
+  waivers    Waiver[]
+  payments   Payment[]
+  sessions   Session[]
+}
+
+model Membership {
+  id   String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Plan metadata
+  planCode       String  // see src/lib/plans.ts
+  planLabel      String
+  membershipType String  // "individual" | "couple"
+  numKids        Int     @default(0)
+  billingCycle   String  // "weekly" | "monthly" | "yearly"
+  priceCents     Int
+  recurring      Boolean @default(false)
+
+  // State machine: pending -> active -> grace -> disabled / expired / cancelled
+  status    String    @default("pending")
+  startDate DateTime?
+  endDate   DateTime?
+  graceUntil DateTime?
+
+  // Key state
+  keyIssued    Boolean   @default(false)
+  keyIssuedAt  DateTime?
+  keyDisabled  Boolean   @default(false)
+  keyReference String?   // Viztin's key id, if available
+
+  // Shopify linkage (populated after checkout)
+  shopifyCustomerId     String?
+  shopifyOrderId        String?
+  shopifySubscriptionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Waiver {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentType String   // "membership_agreement" | "guidelines"
+  signedName   String
+  signedEmail  String
+  signedAt     DateTime
+  ipAddress    String?
+  userAgent    String?
+  waiverText   String
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, documentType])
+}
+
+model Payment {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountCents    Int
+  status         String   // "succeeded" | "failed" | "pending" | "refunded"
+  description    String?
+  shopifyOrderId String?
+  paidAt         DateTime?
+  createdAt      DateTime @default(now())
+}
+
+model Employee {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("staff") // "owner" | "staff"
+  createdAt    DateTime @default(now())
+  sessions     Session[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  userId     String?
+  employeeId String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employee   Employee? @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actorType  String   // "user" | "employee" | "system"
+  action     String
+  targetType String?
+  targetId   String?
+  details    String?
+  createdAt  DateTime @default(now())
+}
